@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enterprise RAG System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+    <style>
+        [v-cloak] { display: none; }
+        .message-content pre {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 16px;
+            overflow-x: auto;
+        }
+        .message-content code {
+            font-family: 'Fira Code', monospace;
+        }
+        .typing-indicator span {
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div id="app" v-cloak>
+        <!-- Header -->
+        <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+            <div class="max-w-6xl mx-auto flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold">Enterprise RAG System</h1>
+                        <p class="text-xs text-gray-400">Multi-tenant AI Assistant with Long-term Memory</p>
+                    </div>
+                </div>
+                
+                <!-- Tenant Config -->
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm text-gray-400">Tenant ID:</label>
+                        <input v-model="tenantId" type="text" 
+                            class="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm w-36 focus:outline-none focus:border-blue-500"
+                            placeholder="Enter tenant ID">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm text-gray-400">User ID:</label>
+                        <input v-model="userId" type="text" 
+                            class="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm w-36 focus:outline-none focus:border-blue-500"
+                            placeholder="Enter user ID">
+                    </div>
+                    <button @click="createTenant" 
+                        class="bg-blue-600 hover:bg-blue-700 px-4 py-1.5 rounded text-sm font-medium transition">
+                        New Tenant
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <div class="max-w-6xl mx-auto flex h-[calc(100vh-73px)]">
+            <!-- Sidebar -->
+            <aside class="w-64 bg-gray-800 border-r border-gray-700 p-4 flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-semibold text-gray-300">Conversations</h2>
+                    <button @click="newConversation" class="text-gray-400 hover:text-white">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto space-y-2">
+                    <div v-for="conv in conversations" :key="conv.id"
+                        @click="selectConversation(conv)"
+                        :class="['p-3 rounded-lg cursor-pointer transition', 
+                            conv.id === conversationId ? 'bg-gray-700' : 'hover:bg-gray-700/50']">
+                        <p class="text-sm truncate">{{ conv.title }}</p>
+                        <p class="text-xs text-gray-500 mt-1">{{ formatDate(conv.createdAt) }}</p>
+                    </div>
+                </div>
+                
+                <!-- Memory Stats -->
+                <div class="border-t border-gray-700 pt-4 mt-4">
+                    <h3 class="text-sm font-semibold text-gray-400 mb-2">Memory Stats</h3>
+                    <div class="space-y-2 text-xs">
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Session Messages:</span>
+                            <span class="text-blue-400">{{ sessionMessages }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Episodic Memories:</span>
+                            <span class="text-purple-400">{{ episodicMemories }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-500">Documents:</span>
+                            <span class="text-green-400">{{ knowledgeDocs }}</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Chat Area -->
+            <main class="flex-1 flex flex-col">
+                <!-- Messages -->
+                <div class="flex-1 overflow-y-auto p-6 space-y-4" ref="messagesContainer">
+                    <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full text-gray-500">
+                        <svg class="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                        </svg>
+                        <p>Start a conversation to begin</p>
+                        <p class="text-sm mt-2">The AI will remember your preferences and context</p>
+                    </div>
+
+                    <div v-for="msg in messages" :key="msg.id" 
+                        :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']">
+                        <div :class="['max-w-3xl rounded-lg p-4', 
+                            msg.role === 'user' ? 'bg-blue-600' : 'bg-gray-700']">
+                            <div class="flex items-start gap-3">
+                                <div v-if="msg.role === 'assistant'" 
+                                    class="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex-shrink-0 flex items-center justify-center">
+                                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                                    </svg>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="message-content prose prose-invert max-w-none" v-html="renderMarkdown(msg.content)"></div>
+                                    
+                                    <!-- Retrieved Context -->
+                                    <div v-if="msg.retrievedMemories && msg.retrievedMemories.length > 0" 
+                                        class="mt-3 pt-3 border-t border-gray-600">
+                                        <p class="text-xs text-gray-400 mb-2">Retrieved memories:</p>
+                                        <div class="flex flex-wrap gap-2">
+                                            <span v-for="memory in msg.retrievedMemories" :key="memory.id"
+                                                class="px-2 py-1 bg-gray-600 rounded text-xs">
+                                                {{ memory.type }}: {{ truncate(memory.content, 30) }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Typing Indicator -->
+                    <div v-if="isTyping" class="flex justify-start">
+                        <div class="bg-gray-700 rounded-lg p-4">
+                            <div class="typing-indicator flex gap-1">
+                                <span class="w-2 h-2 bg-gray-400 rounded-full"></span>
+                                <span class="w-2 h-2 bg-gray-400 rounded-full"></span>
+                                <span class="w-2 h-2 bg-gray-400 rounded-full"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="border-t border-gray-700 p-4">
+                    <form @submit.prevent="sendMessage" class="flex gap-4">
+                        <textarea v-model="inputMessage" 
+                            @keydown.enter.exact.prevent="sendMessage"
+                            class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 resize-none focus:outline-none focus:border-blue-500"
+                            placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
+                            rows="2"></textarea>
+                        <button type="submit" 
+                            :disabled="!inputMessage.trim() || isTyping"
+                            :class="['px-6 py-3 rounded-lg font-medium transition', 
+                                inputMessage.trim() && !isTyping 
+                                    ? 'bg-blue-600 hover:bg-blue-700' 
+                                    : 'bg-gray-700 text-gray-500 cursor-not-allowed']">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+            </main>
+
+            <!-- Right Panel - Knowledge -->
+            <aside class="w-80 bg-gray-800 border-l border-gray-700 p-4 overflow-y-auto">
+                <h2 class="font-semibold text-gray-300 mb-4">Knowledge Base</h2>
+                
+                <!-- Upload Form -->
+                <div class="bg-gray-700 rounded-lg p-4 mb-4">
+                    <h3 class="text-sm font-medium mb-3">Add Document</h3>
+                    <input v-model="docTitle" type="text" 
+                        class="w-full bg-gray-600 border border-gray-500 rounded px-3 py-2 text-sm mb-2 focus:outline-none focus:border-blue-500"
+                        placeholder="Document title">
+                    <textarea v-model="docContent"
+                        class="w-full bg-gray-600 border border-gray-500 rounded px-3 py-2 text-sm mb-2 focus:outline-none focus:border-blue-500 resize-none"
+                        placeholder="Document content..."
+                        rows="4"></textarea>
+                    <button @click="uploadDocument"
+                        :disabled="!docTitle || !docContent"
+                        :class="['w-full py-2 rounded text-sm font-medium transition',
+                            docTitle && docContent ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-600 text-gray-500 cursor-not-allowed']">
+                        Upload to Knowledge Base
+                    </button>
+                </div>
+
+                <!-- Document List -->
+                <div class="space-y-2">
+                    <div v-for="doc in documents" :key="doc.id"
+                        class="bg-gray-700 rounded p-3">
+                        <p class="text-sm font-medium">{{ doc.title }}</p>
+                        <p class="text-xs text-gray-400 mt-1 truncate">{{ doc.content }}</p>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+    const { createApp, ref, computed, nextTick } = Vue;
+
+    createApp({
+        setup() {
+            const tenantId = ref('demo-tenant');
+            const userId = ref('demo-user');
+            const conversationId = ref(null);
+            const inputMessage = ref('');
+            const messages = ref([]);
+            const conversations = ref([]);
+            const isTyping = ref(false);
+            
+            const docTitle = ref('');
+            const docContent = ref('');
+            const documents = ref([]);
+            
+            const sessionMessages = ref(0);
+            const episodicMemories = ref(0);
+            const knowledgeDocs = ref(0);
+            
+            const messagesContainer = ref(null);
+
+            const API_BASE = window.location.origin + '/api';
+
+            const headers = computed(() => ({
+                'Content-Type': 'application/json',
+                'X-Tenant-ID': tenantId.value,
+                'X-User-ID': userId.value
+            }));
+
+            async function createTenant() {
+                try {
+                    const response = await fetch(`${API_BASE}/tenants`, {
+                        method: 'POST',
+                        headers: headers.value,
+                        body: JSON.stringify({
+                            name: `Tenant ${Date.now()}`,
+                            isolationLevel: 'METADATA'
+                        })
+                    });
+                    const data = await response.json();
+                    tenantId.value = data.tenantId;
+                    alert(`Created tenant: ${data.tenantId}`);
+                } catch (error) {
+                    console.error('Error creating tenant:', error);
+                }
+            }
+
+            async function sendMessage() {
+                if (!inputMessage.value.trim() || isTyping.value) return;
+                
+                const userMessage = inputMessage.value;
+                messages.value.push({
+                    id: Date.now(),
+                    role: 'user',
+                    content: userMessage
+                });
+                
+                inputMessage.value = '';
+                isTyping.value = true;
+                
+                try {
+                    const response = await fetch(`${API_BASE}/chat`, {
+                        method: 'POST',
+                        headers: headers.value,
+                        body: JSON.stringify({
+                            message: userMessage,
+                            conversationId: conversationId.value
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    conversationId.value = data.conversationId;
+                    
+                    messages.value.push({
+                        id: data.messageId,
+                        role: 'assistant',
+                        content: data.response,
+                        retrievedMemories: data.retrievedMemories
+                    });
+                    
+                    sessionMessages.value = messages.value.length;
+                    episodicMemories.value = data.retrievedMemories?.length || 0;
+                    
+                    await nextTick();
+                    scrollToBottom();
+                    
+                } catch (error) {
+                    console.error('Error sending message:', error);
+                    messages.value.push({
+                        id: Date.now(),
+                        role: 'assistant',
+                        content: 'Sorry, I encountered an error. Please check if the backend is running.'
+                    });
+                } finally {
+                    isTyping.value = false;
+                }
+            }
+
+            async function uploadDocument() {
+                if (!docTitle.value || !docContent.value) return;
+                
+                try {
+                    const response = await fetch(`${API_BASE}/knowledge`, {
+                        method: 'POST',
+                        headers: headers.value,
+                        body: JSON.stringify({
+                            title: docTitle.value,
+                            content: docContent.value
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    documents.value.unshift(data);
+                    knowledgeDocs.value++;
+                    
+                    docTitle.value = '';
+                    docContent.value = '';
+                    
+                } catch (error) {
+                    console.error('Error uploading document:', error);
+                }
+            }
+
+            function newConversation() {
+                conversationId.value = null;
+                messages.value = [];
+                sessionMessages.value = 0;
+            }
+
+            function selectConversation(conv) {
+                conversationId.value = conv.id;
+                // Would load conversation history from API
+            }
+
+            function renderMarkdown(content) {
+                if (!content) return '';
+                try {
+                    return marked.parse(content);
+                } catch (e) {
+                    return content;
+                }
+            }
+
+            function truncate(str, length) {
+                if (!str) return '';
+                return str.length > length ? str.substring(0, length) + '...' : str;
+            }
+
+            function formatDate(date) {
+                if (!date) return '';
+                return new Date(date).toLocaleDateString();
+            }
+
+            function scrollToBottom() {
+                if (messagesContainer.value) {
+                    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+                }
+            }
+
+            return {
+                tenantId,
+                userId,
+                conversationId,
+                inputMessage,
+                messages,
+                conversations,
+                isTyping,
+                docTitle,
+                docContent,
+                documents,
+                sessionMessages,
+                episodicMemories,
+                knowledgeDocs,
+                messagesContainer,
+                createTenant,
+                sendMessage,
+                uploadDocument,
+                newConversation,
+                selectConversation,
+                renderMarkdown,
+                truncate,
+                formatDate
+            };
+        }
+    }).mount('#app');
+    </script>
+</body>
+</html>

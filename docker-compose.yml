@@ -1,0 +1,182 @@
+# =============================================================================
+# Enterprise RAG System - Docker Compose 配置
+# =============================================================================
+# 一键启动所有依赖服务: Milvus + MySQL + Redis + Embedding
+# 使用: docker-compose up -d
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # Milvus 向量数据库 (v2.5.1)
+  # ---------------------------------------------------------------------------
+  milvus:
+    image: milvusdb/milvus:v2.5.1
+    container_name: milvus-standalone
+    hostname: milvus-standalone
+    restart: unless-stopped
+    ports:
+      - "${MILVUS_HOST_PORT:-19530}:19530"
+      - "${MILVUS_MONITOR_PORT:-9091}:9091"
+    volumes:
+      - ${MILVUS_DATA_DIR:-./milvus_data}/milvus:/var/lib/milvus
+      - ${MILVUS_CONFIG_DIR:-./milvus_config}:/milvus/configs
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIQ_ENABLE: "false"
+    depends_on:
+      - etcd
+      - minio
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 90s
+
+  # ---------------------------------------------------------------------------
+  # etcd - Milvus 元数据存储
+  # ---------------------------------------------------------------------------
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: milvus-etcd
+    hostname: etcd
+    restart: unless-stopped
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ${MILVUS_DATA_DIR:-./milvus_data}/etcd:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # MinIO - Milvus 对象存储
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: milvus-minio
+    hostname: minio
+    restart: unless-stopped
+    ports:
+      - "${MINIO_HOST_PORT:-9001}:9001"
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - ${MILVUS_DATA_DIR:-./milvus_data}/minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # MySQL 8.0 - 关系数据库
+  # ---------------------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: rag-mysql
+    hostname: mysql
+    restart: unless-stopped
+    ports:
+      - "${DB_HOST_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: ${DB_NAME:-rag_db}
+      MYSQL_USER: ${DB_USERNAME:-rag_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-rag_password}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 - 缓存服务
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    hostname: redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - rag-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Qwen3-Embedding 本地服务 (可选，需要 NVIDIA GPU)
+  # ---------------------------------------------------------------------------
+  embedding:
+    build:
+      context: ./embedding_service
+      dockerfile: Dockerfile
+    container_name: qwen-embedding
+    hostname: qwen-embedding
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./models:/app/models
+      - huggingface_cache:/root/.cache/huggingface
+    environment:
+      - HF_ENDPOINT=https://hf-mirror.com
+      - PYTHONUNBUFFERED=1
+    networks:
+      - rag-network
+    # 如果没有 GPU，使用 CPU 版本 (注释掉上面的 embedding 服务，取消下面的注释)
+    # profiles:
+    #   - cpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+# =============================================================================
+# 网络和卷定义
+# =============================================================================
+networks:
+  rag-network:
+    driver: bridge
+
+volumes:
+  milvus_data:
+  mysql_data:
+  redis_data:
+  huggingface_cache:

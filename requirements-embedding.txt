@@ -1,0 +1,13 @@
+# Qwen3-Embedding-0.6B 本地 Embedding 服务依赖
+
+# PyTorch (CPU 版本用于推理)
+torch>=2.0.0
+
+# Transformers 模型加载
+transformers>=4.40.0
+accelerate>=0.25.0
+
+# FastAPI Web 服务
+fastapi>=0.110.0
+uvicorn>=0.27.0
+numpy>=1.24.0

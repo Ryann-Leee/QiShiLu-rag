@@ -1,0 +1,136 @@
+# Milvus Configuration File
+# Version: 2.5.1
+
+etcd:
+  endpoints:
+    - etcd:2379
+  rootPath: by-dev
+  metaSubPath: meta
+  kvSubPath: kv
+  etcdQuotaBackendSizeInBytes: 4294967296
+  etcdSnapshotCount: 50000
+  etcdRequestTimeout: 30
+
+minio:
+  address: minio:9000
+  accessKeyID: minioadmin
+  secretAccessKey: minioadmin
+  useSSL: false
+  bucketName: a-bucket
+  rootPath: files
+  useIAM: false
+
+  # Storage configuration
+  logLevel: info
+  mergePolicy:
+    name: default_merge_policy
+    docCount: 1000
+  flushPolicy:
+    name: default_flush_policy
+    flushInterval: 1
+    forceFlushInterval: 1800
+
+# Querycoord configuration
+queryCoord:
+  address: localhost
+  port: 19531
+  autoHandoff: true
+  autoBalance: true
+  balancerScoreTolerance: 0.1
+  checkerTimeoutMs: 5000
+  checkInterval: 1000
+  balancer:
+    scoreUnbalanceTolerationFactor: 0.3
+  triggerCondition:
+    forceTrigger: 1000
+    forceTriggerDelayInterval: 1000
+
+# Querynode configuration
+queryNode:
+  stats:
+    publishInterval: 1000
+  cache:
+    enabled: true
+    memoryLimit: 2147483644
+ 调度策略
+  scheduler:
+    receiveCore: 0
+    computeCore: 0
+    maxTimestampDegree: 0
+    enableActiveCore: false
+
+# Indexcoord configuration
+indexCoord:
+  address: localhost
+  port: 19532
+  minSegmentSizeToEnableIndex: 1024
+
+# Indexnode configuration
+indexNode:
+  scheduler:
+    buildParallel: 1
+
+# Datacoord configuration
+dataCoord:
+  address: localhost
+  port: 19533
+  enableCompaction: true
+  enableGarbageCollection: false
+  segment:
+    maxSize: 512
+    sealProportion: 0.25
+    assignmentExpiration: 2000
+    maxIdleTime: 3600
+    softMaxIdleTime: 1800
+  flush:
+    flushBufferCoord:
+      insertBufferSize: 33554416
+  levelZeroFiles:
+    maxLevel: 5
+    deltaLogExpansionThreshold: 10
+    maxSize: 1073741824
+    seed: 0
+
+# Datanode configuration
+dataNode:
+  port: 21124
+  dataSync:
+    flushBuffer:
+      channelBufferSize: 33554432
+
+# Rootcoord configuration
+rootCoord:
+  address: localhost
+  port: 53100
+  minSegmentSizeToEnableIndex: 1024
+  import:
+    maxImportTaskNum: 8
+    maxImportFileSizeInGB: 16
+    importBufferInitialSize: 67108864
+    importBufferRowSize: 1000
+
+# Log configuration
+log:
+  level: info
+  format: text
+  file:
+    rootPath: /var/lib/milvus/logs
+    maxSize: 300
+    maxAge: 10
+    maxBackups: 20
+  console:
+    prompt: false
+    level: info
+
+# Common configuration
+common:
+  retentionDuration: 432000
+  entityExpiration: -1
+  gracefulTime: 5000
+  gracefulStopTimeout: 30
+  security:
+    authorizationEnabled: false
+  persistence:
+    enabled: true
+    panicOnFileAbsent: false
+    dataCoord: /var/lib/milvus/data
