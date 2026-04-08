@@ -1,4 +1,4 @@
-# Enterprise RAG System - AGENTS.md
+# QiShiLu-RAG - AGENTS.md
 
 ## 1. 项目概览
 

@@ -2,9 +2,9 @@
 requires = ["python-3.12", "nodejs-24", "java-21"]
 
 [dev]
-build = ["bash", "-c", "pip3 install milvus-lite && cd ${COZE_WORKSPACE_PATH}/rag-system && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && mvn clean install -DskipTests"]
-run = ["bash", "-c", "cd ${COZE_WORKSPACE_PATH}/rag-system && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && python3 start_milvus.py &>/app/work/logs/bypass/milvus.log & sleep 3 && java -jar target/rag-system-1.0.0.jar --server.port=5000"]
+build = ["bash", "-c", "pip3 install milvus-lite && cd ${COZE_WORKSPACE_PATH} && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && mvn clean install -DskipTests"]
+run = ["bash", "-c", "cd ${COZE_WORKSPACE_PATH} && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && python3 start_milvus.py &>/app/work/logs/bypass/milvus.log & sleep 3 && java -jar target/qiShiLu-rag-1.0.0.jar --server.port=5000"]
 
 [deploy]
-build = ["bash", "-c", "cd ${COZE_WORKSPACE_PATH}/rag-system && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && mvn clean package -DskipTests"]
-run = ["bash", "-c", "cd ${COZE_WORKSPACE_PATH}/rag-system && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && java -jar target/rag-system-1.0.0.jar --server.port=5000"]
+build = ["bash", "-c", "cd ${COZE_WORKSPACE_PATH} && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && mvn clean package -DskipTests"]
+run = ["bash", "-c", "cd ${COZE_WORKSPACE_PATH} && export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && java -jar target/qiShiLu-rag-1.0.0.jar --server.port=5000"]
