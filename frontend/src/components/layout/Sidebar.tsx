@@ -53,7 +53,7 @@ export function Sidebar() {
       {/* Tenant Selector */}
       <div className="p-4 border-b">
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+          <DropdownMenuTrigger>
             <Button variant="outline" className="w-full justify-start gap-2">
               <Building2 className="w-4 h-4" />
               {!isCollapsed && (

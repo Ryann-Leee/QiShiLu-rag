@@ -1,5 +1,6 @@
 package com.enterprise.rag.service;
 
+import com.enterprise.rag.cache.RedisChatCacheService;
 import com.enterprise.rag.dto.ChatRequest;
 import com.enterprise.rag.dto.ChatResponse;
 import com.enterprise.rag.entity.Conversation;
@@ -32,6 +33,10 @@ import java.util.stream.Collectors;
  * 4. Construct enhanced prompt with context
  * 5. Generate response via LLM
  * 6. Store new memories and update profile
+ * 
+ * Redis Cache:
+ * - Conversation list: 30min TTL
+ * - Message list: 1hr TTL
  */
 @Slf4j
 @Service
@@ -44,6 +49,7 @@ public class RagService {
     private final MemoryService memoryService;
     private final LLMService llmService;
     private final MilvusService milvusService;
+    private final RedisChatCacheService cacheService;
     
     private static final String SYSTEM_PROMPT = """
             You are an intelligent enterprise assistant with access to the user's conversation history and relevant knowledge.
@@ -118,10 +124,26 @@ public class RagService {
     }
     
     /**
-     * Get or create conversation
+     * Get or create conversation (with Redis cache)
      */
     private Conversation getOrCreateConversation(String conversationId, String userId, String tenantId) {
         if (conversationId != null) {
+            // Try to find from cache first
+            List<Conversation> conversations = cacheService.getConversations(
+                tenantId,
+                () -> conversationRepository.findByTenantId(tenantId)
+            );
+            
+            Conversation cached = conversations.stream()
+                .filter(c -> c.getId().equals(conversationId))
+                .findFirst()
+                .orElse(null);
+            
+            if (cached != null) {
+                return cached;
+            }
+            
+            // Not in cache, try database
             return conversationRepository.findByIdAndTenantId(conversationId, tenantId)
                     .orElseGet(() -> createConversation(userId, tenantId));
         }
@@ -129,7 +151,7 @@ public class RagService {
     }
     
     /**
-     * Create new conversation
+     * Create new conversation (MySQL + Redis cache)
      */
     private Conversation createConversation(String userId, String tenantId) {
         Conversation conversation = Conversation.builder()
@@ -138,13 +160,21 @@ public class RagService {
                 .tenantId(tenantId)
                 .title("New Conversation")
                 .isActive(true)
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
                 .build();
         
-        return conversationRepository.save(conversation);
+        // Save to MySQL
+        Conversation saved = conversationRepository.save(conversation);
+        
+        // Update cache
+        cacheService.updateConversation(tenantId, saved);
+        
+        return saved;
     }
     
     /**
-     * Store a message
+     * Store a message (MySQL + Redis cache)
      */
     private Message storeMessage(String conversationId, String userId, String tenantId,
                                   Message.MessageRole role, String content) {
@@ -157,7 +187,13 @@ public class RagService {
                 .content(content)
                 .build();
         
-        return messageRepository.save(message);
+        // Save to MySQL (持久化)
+        Message savedMessage = messageRepository.save(message);
+        
+        // Append to Redis cache
+        cacheService.appendMessage(conversationId, savedMessage);
+        
+        return savedMessage;
     }
     
     /**
@@ -210,10 +246,14 @@ public class RagService {
     }
     
     /**
-     * Get conversation history for LLM
+     * Get conversation history for LLM (with Redis cache)
      */
     private List<LLMService.Message> getConversationHistory(String conversationId) {
-        List<Message> messages = messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId);
+        // Try to get from Redis cache first
+        List<Message> messages = cacheService.getMessages(
+            conversationId,
+            () -> messageRepository.findByConversationIdOrderByCreatedAtAsc(conversationId)
+        );
         
         return messages.stream()
                 .map(m -> new LLMService.Message(

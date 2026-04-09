@@ -93,7 +93,7 @@ export default function SettingsPage() {
                         </CardDescription>
                       </div>
                       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-                        <DialogTrigger asChild>
+                        <DialogTrigger>
                           <Button>
                             <Plus className="w-4 h-4 mr-2" />
                             新建租户
@@ -129,7 +129,7 @@ export default function SettingsPage() {
                             </div>
                             <div>
                               <Label htmlFor="level">隔离级别</Label>
-                              <Select value={newTenantLevel} onValueChange={setNewTenantLevel}>
+                              <Select value={newTenantLevel} onValueChange={(v) => v && setNewTenantLevel(v)}>
                                 <SelectTrigger className="mt-1">
                                   <SelectValue />
                                 </SelectTrigger>
