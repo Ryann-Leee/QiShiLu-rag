@@ -331,4 +331,102 @@ public class RagService {
                 .userProfileSummary(context.getUserProfile().getSummary())
                 .build();
     }
+    
+    // ==================== Streaming Methods ====================
+    
+    /**
+     * Stream chat response (SSE)
+     * 
+     * @param request Chat request
+     * @param onChunk Callback for each content chunk: (chunk, isComplete)
+     */
+    public void chatStream(ChatRequest request, ChunkCallback onChunk) {
+        String userId = TenantContext.getCurrentUserId();
+        String tenantId = TenantContext.getCurrentTenantId();
+        
+        // 1. Get or create conversation
+        Conversation conversation = getOrCreateConversation(
+            request.getConversationId(), userId, tenantId);
+        
+        // 2. Store user message
+        Message userMessage = storeMessage(
+            conversation.getId(), userId, tenantId,
+            Message.MessageRole.USER, request.getMessage());
+        
+        // 3. Get conversation history for context
+        List<LLMService.Message> history = getConversationHistory(conversation.getId());
+        
+        // 4. Recall memory context
+        String memoryContext = "";
+        if (request.isUseMemory()) {
+            MemoryContext memory = memoryService.recall(request.getMessage(), tenantId, userId);
+            memoryContext = buildMemoryContext(memory);
+        }
+        
+        // 5. Build system prompt
+        String systemPrompt = buildSystemPrompt(
+            request.isUseRag() ? buildRagContext(request.getMessage()) : "",
+            memoryContext
+        );
+        
+        // 6. Generate streaming response
+        StringBuilder fullContent = new StringBuilder();
+        
+        llmService.generateStreamingCompletion(
+            systemPrompt,
+            history,
+            (chunk) -> {
+                fullContent.append(chunk);
+                // 回调：发送内容片段
+                onChunk.onChunk(chunk, false);
+            }
+        ).exceptionally(ex -> {
+            log.error("Streaming error: {}", ex.getMessage());
+            onChunk.onChunk("\n[Error: " + ex.getMessage() + "]", true);
+            return null;
+        }).join();
+        
+        // 7. Store assistant message (持久化)
+        Message assistantMessage = Message.builder()
+            .id(UUID.randomUUID().toString())
+            .conversationId(conversation.getId())
+            .userId(userId)
+            .tenantId(tenantId)
+            .role(Message.MessageRole.ASSISTANT)
+            .content(fullContent.toString())
+            .build();
+        messageRepository.save(assistantMessage);
+        
+        // 8. 更新 Redis 缓存
+        cacheService.appendMessage(conversation.getId(), assistantMessage);
+        
+        // 9. Update episodic memory
+        if (request.isUseMemory()) {
+            memoryService.remember(
+                request.getMessage(),
+                fullContent.toString(),
+                tenantId,
+                userId
+            );
+        }
+        
+        // 10. 标记完成
+        onChunk.onChunk("", true);
+        
+        log.info("Stream chat completed: conversationId={}, contentLength={}",
+            conversation.getId(), fullContent.length());
+    }
+    
+    /**
+     * Chunk callback interface for streaming
+     */
+    @FunctionalInterface
+    public interface ChunkCallback {
+        /**
+         * Called for each chunk of content
+         * @param chunk The content chunk
+         * @param isComplete Whether this is the final chunk
+         */
+        void onChunk(String chunk, boolean isComplete);
+    }
 }

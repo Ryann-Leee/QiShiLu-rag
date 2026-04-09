@@ -114,6 +114,7 @@ class ApiClient {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let eventName = '';
       let buffer = '';
 
       while (true) {
@@ -125,23 +126,36 @@ class ApiClient {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') {
+          const trimmedLine = line.trim();
+          
+          if (trimmedLine.startsWith('event:')) {
+            eventName = trimmedLine.slice(6).trim();
+          } else if (trimmedLine.startsWith('data:')) {
+            const data = trimmedLine.slice(5).trim();
+            
+            if (eventName === 'content') {
+              // 内容片段
+              onChunk(data);
+            } else if (eventName === 'done') {
+              // 完成
               onComplete();
               return;
+            } else if (eventName === 'error') {
+              // 错误
+              onError(new Error(data));
+              return;
+            } else if (eventName === 'message_stored') {
+              // 消息已存储，继续等待
+              continue;
             }
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                onChunk(parsed.content);
-              }
-            } catch {
-              // 忽略解析错误
-            }
+          } else if (trimmedLine === '') {
+            // 空行，重置事件名
+            eventName = '';
           }
         }
       }
+      
+      // 如果没有收到 done 事件，标记完成
       onComplete();
     } catch (error) {
       onError(error instanceof Error ? error : new Error('Unknown error'));
