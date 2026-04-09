@@ -150,10 +150,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setStreamingContent('');
 
     return new Promise<void>((resolve, reject) => {
+      let accumulatedContent = '';
+      
       api.sendMessageStream(
         { message: content, conversationId: convId, useRag, useMemory },
         (chunk) => {
-          setStreamingContent(prev => prev + chunk);
+          accumulatedContent += chunk;
+          setStreamingContent(accumulatedContent);
         },
         () => {
           // 完成
@@ -161,7 +164,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             id: `temp-${Date.now() + 1}`,
             conversationId: convId!,
             role: 'assistant',
-            content: streamingContent + (streamingContent ? '' : ''),
+            content: accumulatedContent,
             createdAt: new Date().toISOString(),
           };
           setMessages(prev => [...prev.filter(m => m.id !== userMessage.id), userMessage, assistantMessage]);
