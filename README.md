@@ -712,8 +712,8 @@ chore: 构建/工具相关
 
 ## 联系方式
 
-- GitHub Issues: [https://github.com/your-org/enterprise-rag-system/issues](https://github.com/your-org/enterprise-rag-system/issues)
-- Email: your.email@example.com
+- GitHub Issues: [https://github.com/Ryann-Leee/QiShiLu-rag/issues](https://github.com/Ryann-Leee/QiShiLu-rag/issues)
+- Email: ryannlee@foxmail.com
 
 ---
 
